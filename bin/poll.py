@@ -79,6 +79,151 @@ def poll(status: str) -> list[dict]:
         })
     return issues
 
+SUB_ISSUES_QUERY = """
+query($parentId: String!) {
+  issue(id: $parentId) {
+    children {
+      nodes {
+        id
+        identifier
+        title
+        state { name }
+        labels {
+          nodes {
+            name
+            parent { name }
+          }
+        }
+        relations {
+          nodes {
+            type
+            relatedIssue { id }
+          }
+        }
+        inverseRelations {
+          nodes {
+            type
+            issue {
+              id
+              state { name }
+            }
+          }
+        }
+      }
+    }
+    documents {
+      nodes {
+        id
+        title
+        content
+      }
+    }
+  }
+}
+"""
+
+TERMINAL_STATES = {"In Review", "Done", "Cancelled", "Failed"}
+
+
+def is_ready(node: dict) -> bool:
+    state_name = node.get("state", {}).get("name", "")
+    if state_name in TERMINAL_STATES:
+        return False
+    for rel in node.get("inverseRelations", {}).get("nodes", []):
+        if rel["type"] == "blocks":
+            blocker_state = rel.get("issue", {}).get("state", {}).get("name", "")
+            if blocker_state != "Done":
+                return False
+    return True
+
+
+def detect_dependency_cycle(nodes: list[dict]) -> list[str] | None:
+    """サブ Issue 間の blocks リレーションにサイクルがあれば、そのサイクル上の identifier リストを返す。"""
+    id_set = {n["id"] for n in nodes}
+    id_to_ident = {n["id"]: n["identifier"] for n in nodes}
+
+    # adjacency: blocker -> blocked (blocks 方向)
+    graph: dict[str, list[str]] = {n["id"]: [] for n in nodes}
+    for node in nodes:
+        for rel in node.get("relations", {}).get("nodes", []):
+            if rel["type"] == "blocks":
+                target = rel["relatedIssue"]["id"]
+                if target in id_set:
+                    graph[node["id"]].append(target)
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {nid: WHITE for nid in id_set}
+    parent: dict[str, str | None] = {}
+
+    def dfs(u: str) -> list[str] | None:
+        color[u] = GRAY
+        for v in graph[u]:
+            if color[v] == GRAY:
+                cycle = [id_to_ident[v], id_to_ident[u]]
+                cur = u
+                while cur != v:
+                    cur = parent.get(cur)
+                    if cur is None:
+                        break
+                    cycle.append(id_to_ident[cur])
+                cycle.reverse()
+                return cycle
+            if color[v] == WHITE:
+                parent[v] = u
+                result = dfs(v)
+                if result:
+                    return result
+        color[u] = BLACK
+        return None
+
+    for nid in id_set:
+        if color[nid] == WHITE:
+            result = dfs(nid)
+            if result:
+                return result
+    return None
+
+
+def fetch_sub_issues(parent_id: str) -> dict:
+    env = load_env()
+    api_key = env.get("LINEAR_API_KEY") or os.environ.get("LINEAR_API_KEY", "")
+    if not api_key:
+        print("LINEAR_API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+
+    data = graphql(api_key, SUB_ISSUES_QUERY, {"parentId": parent_id})
+    issue = data.get("data", {}).get("issue", {})
+    nodes = issue.get("children", {}).get("nodes", [])
+
+    sub_issues = []
+    for node in nodes:
+        state_name = node.get("state", {}).get("name", "")
+        labels = []
+        for label in node.get("labels", {}).get("nodes", []):
+            p = label.get("parent")
+            name = label["name"]
+            labels.append(f"{p['name']}:{name}" if p else name)
+
+        sub_issues.append({
+            "id": node["id"],
+            "identifier": node["identifier"],
+            "title": node["title"],
+            "state": state_name,
+            "labels": labels,
+            "ready": is_ready(node),
+        })
+
+    documents = []
+    for doc in issue.get("documents", {}).get("nodes", []):
+        documents.append({
+            "id": doc["id"],
+            "title": doc["title"],
+            "content": doc["content"],
+        })
+
+    return {"sub_issues": sub_issues, "documents": documents, "cycle": detect_dependency_cycle(nodes)}
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: poll.py <status_name>", file=sys.stderr)

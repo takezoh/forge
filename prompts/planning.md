@@ -38,12 +38,24 @@ Plan エージェントの出力を `create_document` で Linear ドキュメン
 計画の各作業単位を `save_issue` で Sub-issue に変換する。
 
 - `parentId`: `{{ISSUE_ID}}`
+- `stateId`: "Todo" ステータスの ID を使用（`list_issue_statuses` で取得）
 - `description`: Plan エージェントが出力した実装方針をそのまま転記
 - 改行は実際の改行文字を使用（リテラルな `\n` は不可）
 - 親 Issue と同じラベルを付与
 - 依存関係があれば `blockedBy` / `blocks` を設定
 
-### 5. 完了処理
+### 5. 依存関係のサイクルチェック
+
+Sub-issue 作成後、以下の Bash コマンドで依存関係にサイクルがないことを検証する:
+
+```bash
+python /home/take/dev/forge/bin/check_cycle.py <parent_issue_id>
+```
+
+- 出力が "OK" ならステップ 6 へ
+- サイクルが検出された場合、該当する `blockedBy` / `blocks` リレーションを修正してから再実行する
+
+### 6. 完了処理
 
 - 親 Issue に `save_comment` で計画サマリーを投稿（Sub-issue 一覧 + 依存関係）
 - 親 Issue のステータスを "Pending Approval" に変更（`save_issue` で state を変更）

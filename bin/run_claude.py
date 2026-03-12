@@ -41,7 +41,7 @@ def mark_failed(env: dict, issue_id: str, log_file: Path):
         capture_output=True, text=True, env=run_env,
     )
 
-def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str):
+def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str, parent_issue_id: str = ""):
     env = load_env()
     log_dir = Path(env["FORGE_LOG_DIR"])
     lock_dir = Path(env["FORGE_LOCK_DIR"])
@@ -57,6 +57,7 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str):
     prompt = prompt_file.read_text()
     prompt = prompt.replace("{{ISSUE_ID}}", issue_id)
     prompt = prompt.replace("{{ISSUE_IDENTIFIER}}", issue_identifier)
+    prompt = prompt.replace("{{PARENT_ISSUE_ID}}", parent_issue_id)
 
     repo = Path(repo_path)
 
@@ -65,7 +66,8 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str):
         work_dir = repo
     elif phase == "implementing":
         budget = env["FORGE_BUDGET_IMPLEMENTING"]
-        worktree_dir = repo / ".worktrees" / issue_identifier
+        worktree_base = Path(env["FORGE_WORKTREE_DIR"])
+        worktree_dir = worktree_base / repo.name / issue_identifier
         worktree_dir.parent.mkdir(parents=True, exist_ok=True)
 
         # worktree 作成: 新規ブランチ or 既存ブランチ
@@ -118,6 +120,7 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str):
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print("Usage: run_claude.py <phase> <issue_id> <issue_identifier> <repo_path>", file=sys.stderr)
+        print("Usage: run_claude.py <phase> <issue_id> <identifier> <repo_path> [parent_issue_id]", file=sys.stderr)
         sys.exit(1)
-    run(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    parent_id = sys.argv[5] if len(sys.argv) > 5 else ""
+    run(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], parent_id)

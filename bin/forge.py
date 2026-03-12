@@ -12,7 +12,7 @@ from pathlib import Path
 FORGE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(FORGE_ROOT / "bin"))
 
-from poll import load_env, poll
+from poll import load_env, poll, fetch_sub_issues
 
 def load_repos() -> dict[str, str]:
     repos = {}
@@ -47,6 +47,39 @@ def clean_stale_locks(lock_dir: Path, timeout_min: int):
 def log(msg: str):
     print(f"[{datetime.now():%H:%M:%S}] {msg}")
 
+def dispatch_issue(phase: str, issue: dict, lock_dir: Path, max_concurrent: int,
+                   repos: dict[str, str], parent_id: str = "") -> subprocess.Popen | None:
+    issue_id = issue["id"]
+    identifier = issue["identifier"]
+    title = issue["title"]
+    labels = issue.get("labels", [])
+
+    lock_file = lock_dir / f"{issue_id}.lock"
+    if lock_file.exists():
+        log(f"  Skip {identifier} (locked): {title}")
+        return None
+
+    if count_locks(lock_dir) >= max_concurrent:
+        log(f"  Skip {identifier} (max concurrent): {title}")
+        return None
+
+    repo_path = resolve_repo(labels, repos)
+    if not repo_path:
+        log(f"  Skip {identifier} (no repo label): {title}")
+        return None
+    if not Path(repo_path).is_dir():
+        log(f"  Skip {identifier} (repo not found: {repo_path}): {title}")
+        return None
+
+    log(f"  Start {identifier} ({phase}): {title}")
+    lock_file.write_text(identifier)
+
+    cmd = [sys.executable, str(FORGE_ROOT / "bin" / "run_claude.py"), phase, issue_id, identifier, repo_path]
+    if parent_id:
+        cmd.append(parent_id)
+
+    return subprocess.Popen(cmd)
+
 def main():
     env = load_env()
     log_dir = Path(env["FORGE_LOG_DIR"])
@@ -71,41 +104,52 @@ def main():
 
     processes: list[subprocess.Popen] = []
 
-    for phase, issues in [("planning", planning_issues), ("implementing", implementing_issues)]:
-        if not issues:
-            continue
-        log(f"{len(issues)} {phase} issue(s) found")
+    # Planning: 親 Issue を直接ディスパッチ
+    if planning_issues:
+        log(f"{len(planning_issues)} planning issue(s) found")
+        for issue in planning_issues:
+            p = dispatch_issue("planning", issue, lock_dir, max_concurrent, repos)
+            if p:
+                processes.append(p)
 
-        for issue in issues:
-            issue_id = issue["id"]
-            identifier = issue["identifier"]
-            title = issue["title"]
-            labels = issue.get("labels", [])
+    # Implementing: 親 Issue → サブ Issue を依存順にディスパッチ
+    if implementing_issues:
+        log(f"{len(implementing_issues)} implementing parent issue(s) found")
+        for parent in implementing_issues:
+            parent_id = parent["id"]
+            parent_identifier = parent["identifier"]
+            parent_labels = parent.get("labels", [])
 
-            lock_file = lock_dir / f"{issue_id}.lock"
-            if lock_file.exists():
-                log(f"  Skip {identifier} (locked): {title}")
-                continue
-
-            if count_locks(lock_dir) >= max_concurrent:
-                log(f"  Skip {identifier} (max concurrent): {title}")
-                break
-
-            repo_path = resolve_repo(labels, repos)
+            repo_path = resolve_repo(parent_labels, repos)
             if not repo_path:
-                log(f"  Skip {identifier} (no repo label): {title}")
+                log(f"  Skip {parent_identifier} (no repo label): {parent['title']}")
                 continue
             if not Path(repo_path).is_dir():
-                log(f"  Skip {identifier} (repo not found: {repo_path}): {title}")
+                log(f"  Skip {parent_identifier} (repo not found: {repo_path}): {parent['title']}")
                 continue
 
-            log(f"  Start {identifier} ({phase}): {title}")
-            lock_file.write_text(identifier)
+            log(f"  Fetching sub-issues for {parent_identifier}...")
+            result = fetch_sub_issues(parent_id)
+            sub_issues = result["sub_issues"]
 
-            p = subprocess.Popen(
-                [sys.executable, str(FORGE_ROOT / "bin" / "run_claude.py"), phase, issue_id, identifier, repo_path],
-            )
-            processes.append(p)
+            if result.get("cycle"):
+                log(f"  Skip {parent_identifier} (dependency cycle: {' -> '.join(result['cycle'])})")
+                continue
+
+            ready = [s for s in sub_issues if s.get("ready")]
+            done = [s for s in sub_issues if s.get("state") in ("In Review", "Done")]
+            log(f"  {parent_identifier}: {len(sub_issues)} sub-issues, {len(ready)} ready, {len(done)} done/in-review")
+
+            for sub in ready:
+                sub_issue = {
+                    "id": sub["id"],
+                    "identifier": sub["identifier"],
+                    "title": sub["title"],
+                    "labels": parent_labels,
+                }
+                p = dispatch_issue("implementing", sub_issue, lock_dir, max_concurrent, repos, parent_id=parent_id)
+                if p:
+                    processes.append(p)
 
     for p in processes:
         p.wait()

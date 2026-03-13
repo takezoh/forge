@@ -12,8 +12,7 @@ def load_env():
         cfg = json.load(f)
 
     env = {
-        "FORGE_TEAM": cfg["team"],
-        "FORGE_TEAM_ID": cfg["team_id"],
+        "LINEAR_TEAM": cfg["team"],
         "FORGE_MODEL": cfg["model"]["default"],
         "FORGE_LOG_DIR": cfg["log_dir"],
         "FORGE_LOCK_DIR": cfg["lock_dir"],
@@ -39,6 +38,10 @@ def load_env():
                     continue
                 k, _, v = line.partition("=")
                 env[k] = v.strip('"').strip("'")
+
+    from .linear import resolve_team_id
+    api_key = get_api_key(env)
+    env["LINEAR_TEAM_ID"] = resolve_team_id(env["LINEAR_TEAM"], api_key)
 
     return env
 

@@ -19,6 +19,24 @@ def graphql(api_key: str, query: str, variables: dict = None) -> dict:
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read())
 
+TEAM_QUERY = """
+query($teamName: String!) {
+  teams(filter: { name: { eq: $teamName } }) {
+    nodes { id name }
+  }
+}
+"""
+
+
+def resolve_team_id(team_name: str, api_key: str) -> str:
+    data = graphql(api_key, TEAM_QUERY, {"teamName": team_name})
+    nodes = data.get("data", {}).get("teams", {}).get("nodes", [])
+    if not nodes:
+        print(f"Team '{team_name}' not found", file=sys.stderr)
+        sys.exit(1)
+    return nodes[0]["id"]
+
+
 ISSUES_QUERY = """
 query($teamId: ID!, $stateName: String!) {
   issues(filter: {
@@ -50,7 +68,7 @@ def poll(status: str, env=None) -> list[dict]:
         print("LINEAR_API_KEY not set", file=sys.stderr)
         sys.exit(1)
 
-    team_id = env["FORGE_TEAM_ID"]
+    team_id = env["LINEAR_TEAM_ID"]
     data = graphql(api_key, ISSUES_QUERY, {"teamId": team_id, "stateName": status})
 
     issues = []
@@ -146,7 +164,7 @@ def update_issue_state(issue_id: str, state_name: str, env=None):
     if env is None:
         env = load_env()
     api_key = get_api_key(env)
-    team_id = env["FORGE_TEAM_ID"]
+    team_id = env["LINEAR_TEAM_ID"]
 
     data = graphql(api_key, WORKFLOW_STATES_QUERY, {"teamId": team_id})
     states = data.get("data", {}).get("workflowStates", {}).get("nodes", [])
@@ -315,7 +333,7 @@ def fetch_todo_state_id(team_id: str = "", env=None) -> str:
         env = load_env()
     api_key = get_api_key(env)
     if not team_id:
-        team_id = env["FORGE_TEAM_ID"]
+        team_id = env["LINEAR_TEAM_ID"]
     data = graphql(api_key, WORKFLOW_STATES_QUERY, {"teamId": team_id})
     states = data.get("data", {}).get("workflowStates", {}).get("nodes", [])
     return next((s["id"] for s in states if s["name"] == STATE_TODO), "")

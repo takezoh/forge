@@ -24,18 +24,21 @@ sudo apt-get install bubblewrap socat
 
 1. Copy example configs:
    ```bash
-   cp config/forge.env.example config/forge.env
+   cp config/settings.json.example config/settings.json
+   cp config/secrets.env.example config/secrets.env
    cp config/repos.conf.example config/repos.conf
    ```
 
-2. Edit `config/forge.env` — set `LINEAR_API_KEY`, `FORGE_TEAM_ID`, etc.
+2. Edit `config/settings.json` — set `team_id`, model/budget settings, directories, etc.
 
-3. Edit `config/repos.conf` — map labels to repository paths:
+3. Edit `config/secrets.env` — set `LINEAR_API_KEY`
+
+4. Edit `config/repos.conf` — map labels to repository paths:
    ```
    myproject=/home/user/dev/myproject
    ```
 
-4. Add the Linear MCP server to Claude Code:
+5. Add the Linear MCP server to Claude Code:
    ```bash
    claude mcp add linear-server -- npx -y @anthropic-ai/linear-mcp-server
    ```
@@ -57,21 +60,29 @@ bin/main.sh
 ```
 forge.py
   ├── Poll "Planning" issues → dispatch to planning prompt
+  ├── Poll "Plan Changes Requested" issues → dispatch to plan_review prompt
   ├── Poll "Implementing" issues (parent) → fetch sub-issues + dependency check
   │   ├── Filter ready sub-issues (blockers resolved, not terminal)
   │   └── Dispatch each to implementing prompt
+  ├── Poll "Changes Requested" issues → dispatch to review prompt
   └── Wait for all processes
 
 run_claude.py
   ├── Load prompt template + substitute variables
-  ├── Create worktree (implementing only)
+  ├── Pre-fetch Linear data (issue detail, documents, sub-issues, comments)
+  ├── Create worktree (implementing / review only)
   ├── Write sandbox settings
   └── Execute claude CLI in sandboxed environment
 
 Planning (prompts/planning.md)
-  ├── Analyze issue via Linear MCP
   ├── Delegate code investigation to Plan agent
   ├── Create plan document + sub-issues
+  ├── Validate dependency cycle
+  └── Update status → Pending Approval
+
+Plan Review (prompts/plan_review.md)
+  ├── Read review feedback from issue comments
+  ├── Incrementally update plan document + sub-issues
   ├── Validate dependency cycle
   └── Update status → Pending Approval
 
@@ -80,23 +91,40 @@ Implementing (prompts/implementing.md)
   ├── Launch implementer agent (Sonnet)
   ├── Launch reviewer agent (Opus)
   ├── Feedback loop (max 2 rounds)
-  └── Commit → Push → Draft PR → Linear update
+  └── Commit → Push → Merge to parent branch → Linear update
+
+Review (prompts/review.md)
+  ├── Read PR review comments + diff
+  ├── Fix issues in worktree
+  └── Commit → Push → Update status → In Review
 ```
 
 ## Workflow
 
 ```
-Backlog → Planning → Pending Approval → Implementing → In Review → Done
+Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Implementing → In Review ⇄ Changes Requested → Done
 ```
 
-| Status | Actor | Description |
-|--------|-------|-------------|
-| Backlog | Human | Not started |
-| Planning | Agent | Creating sub-issues and plan |
-| Pending Approval | Human | Reviewing the plan |
-| Implementing | Agent | Building + PR creation |
-| In Review | Human | Reviewing PRs |
-| Done | Auto | Completed |
+| Status | Category | Actor | Description |
+|--------|----------|-------|-------------|
+| Backlog | Backlog | Human | Not started |
+| Planning | Started | Agent | Creating sub-issues and plan |
+| Pending Approval | Started | Human | Reviewing the plan |
+| Plan Changes Requested | Started | Agent | Revising plan based on feedback |
+| Implementing | Started | Agent | Building + PR creation |
+| In Review | Started | Human | Reviewing PRs |
+| Changes Requested | Started | Agent | Fixing PR review feedback |
+| Failed | Started | Auto | Execution failed |
+| Done | Completed | Auto | Completed |
+| Cancelled | Cancelled | Human | Cancelled |
+
+### Linear Setup
+
+Configure issue statuses in **Settings → Teams → Issue statuses & automations**.
+
+Enable the following automations:
+- Auto-complete parent issue when all sub-issues are Done
+- Auto-cancel all sub-issues when parent issue is Cancelled
 
 ## File Structure
 
@@ -107,9 +135,15 @@ Backlog → Planning → Pending Approval → Implementing → In Review → Don
 | `bin/run_claude.py` | Per-issue claude CLI execution with sandbox |
 | `bin/check_cycle.py` | Dependency cycle detection CLI |
 | `bin/main.sh` | Shell wrapper for forge.py |
+| `bin/daemon.sh` | Daemon loop wrapper for systemd |
+| `bin/service-systemd.sh` | systemd user service management |
 | `prompts/planning.md` | Planning phase prompt template |
+| `prompts/plan_review.md` | Plan review phase prompt template |
 | `prompts/implementing.md` | Implementing phase prompt (conductor pattern) |
-| `config/forge.env` | Environment configuration (gitignored) |
+| `prompts/review.md` | PR review feedback phase prompt |
+| `prompts/pr.md` | PR description generation prompt |
+| `config/settings.json` | Configuration — models, budgets, directories (gitignored) |
+| `config/secrets.env` | Credentials — LINEAR_API_KEY (gitignored) |
 | `config/repos.conf` | Label → repo path mapping (gitignored) |
 | `setup.sh` | Environment setup and validation script |
 
@@ -118,9 +152,11 @@ Backlog → Planning → Pending Approval → Implementing → In Review → Don
 | Role | Model | Rationale |
 |------|-------|-----------|
 | Planner | Opus | High reasoning for codebase analysis and task decomposition |
+| Plan Reviewer | Opus | Understanding feedback and revising plans |
 | Conductor | Sonnet | Procedural orchestration, cost-efficient |
 | Implementer | Sonnet | Code generation, speed and cost balance |
 | Reviewer | Opus | Deep reasoning for bug and design issue detection |
+| PR Description | Haiku | Simple text generation, low cost |
 
 ## Sandbox
 

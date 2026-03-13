@@ -16,9 +16,9 @@
   },
   "model": {
     "default": "sonnet",
-    "planning": "opus",
+    "planning": "sonnet",
     "implementing": "sonnet",
-    "plan_review": "opus",
+    "plan_review": "sonnet",
     "pr": "haiku",
     "review": "opus"
   },

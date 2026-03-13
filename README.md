@@ -151,8 +151,8 @@ Enable the following automations:
 
 | Role | Model | Rationale |
 |------|-------|-----------|
-| Planner | Opus | High reasoning for codebase analysis and task decomposition |
-| Plan Reviewer | Opus | Understanding feedback and revising plans |
+| Planner | Sonnet + Opus subagent | Sonnet orchestrates, Opus subagent for codebase analysis |
+| Plan Reviewer | Sonnet + Opus subagent | Sonnet orchestrates, Opus subagent for re-investigation |
 | Conductor | Sonnet | Procedural orchestration, cost-efficient |
 | Implementer | Sonnet | Code generation, speed and cost balance |
 | Reviewer | Opus | Deep reasoning for bug and design issue detection |

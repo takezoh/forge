@@ -18,7 +18,7 @@ Use the following pre-fetched issue details:
 
 ### 2. Delegate to Plan Agent
 
-Launch an Agent tool (`subagent_type: Plan`) and delegate codebase investigation and planning.
+Launch an Agent tool (`subagent_type: Plan`, `model: opus`) and delegate codebase investigation and planning.
 
 Include the following in the prompt:
 - Issue title, description, labels

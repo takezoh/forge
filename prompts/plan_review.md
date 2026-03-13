@@ -33,7 +33,7 @@ Read all review comments carefully. Identify what changes are requested:
 - Missing considerations or requirements
 
 ### 2. Investigate Code (if needed)
-If the feedback requires re-investigating the codebase, launch an Agent tool (subagent_type: Plan) to investigate specific areas.
+If the feedback requires re-investigating the codebase, launch an Agent tool (subagent_type: Plan, model: opus) to investigate specific areas.
 
 ### 3. Update Plan Document
 Update the existing plan document using `update_document` to reflect the revised plan.

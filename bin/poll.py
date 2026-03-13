@@ -142,6 +142,21 @@ query($teamId: ID!) {
 """
 
 
+CREATE_COMMENT_MUTATION = """
+mutation($issueId: String!, $body: String!) {
+  commentCreate(input: { issueId: $issueId, body: $body }) {
+    comment { id }
+  }
+}
+"""
+
+
+def create_comment(issue_id: str, body: str):
+    env = load_env()
+    api_key = env.get("LINEAR_API_KEY") or os.environ.get("LINEAR_API_KEY", "")
+    graphql(api_key, CREATE_COMMENT_MUTATION, {"issueId": issue_id, "body": body})
+
+
 def update_issue_state(issue_id: str, state_name: str):
     env = load_env()
     api_key = env.get("LINEAR_API_KEY") or os.environ.get("LINEAR_API_KEY", "")

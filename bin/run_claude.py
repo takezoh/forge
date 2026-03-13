@@ -9,6 +9,9 @@ from datetime import datetime
 from pathlib import Path
 
 FORGE_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(FORGE_ROOT / "bin"))
+
+from poll import update_issue_state, create_comment
 
 
 def detect_default_branch(repo_path: str) -> str:
@@ -84,26 +87,15 @@ def load_env():
     return env
 
 
-def mark_failed(env: dict, issue_id: str, log_file: Path):
+def mark_failed(issue_id: str, log_file: Path):
     tail = ""
     if log_file.exists():
         lines = log_file.read_text().splitlines()
         tail = "\n".join(lines[-20:])
 
-    run_env = {**os.environ}
-    run_env.pop("CLAUDECODE", None)
-
-    subprocess.run(
-        [
-            "claude", "--print",
-            "--no-session-persistence",
-            "--max-budget-usd", "0.03",
-            "--model", env["FORGE_MODEL"],
-            "--allowedTools", "mcp__linear-server__save_issue,mcp__linear-server__save_comment",
-            "-p", f'Change the status of Linear issue ID {issue_id} to "Failed". Also post a comment reporting the execution failure. Log tail:\n{tail}',
-        ],
-        capture_output=True, text=True, env=run_env,
-    )
+    update_issue_state(issue_id, "Failed")
+    body = f"Execution failed.\n\n```\n{tail}\n```" if tail else "Execution failed."
+    create_comment(issue_id, body)
 
 def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
         parent_issue_id: str = "", parent_identifier: str = ""):
@@ -162,7 +154,7 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
                 )
                 if ret.returncode != 0:
                     print(f"Failed to create worktree for {issue_identifier}: {ret.stderr.strip()}", file=sys.stderr)
-                    mark_failed(env, issue_id, log_file)
+                    mark_failed(issue_id, log_file)
                     sys.exit(1)
 
         run_env = {**os.environ}
@@ -193,7 +185,7 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
             )
 
         if ret.returncode != 0:
-            mark_failed(env, issue_id, log_file)
+            mark_failed(issue_id, log_file)
             sys.exit(1)
 
         # Merge sub-issue branch into parent branch
@@ -211,7 +203,7 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
                 if merge_ret.returncode != 0:
                     subprocess.run(["git", "-C", str(parent_wt), "merge", "--abort"],
                                    capture_output=True)
-                    mark_failed(env, issue_id, log_file)
+                    mark_failed(issue_id, log_file)
                     sys.exit(1)
                 subprocess.run(
                     ["git", "-C", str(parent_wt), "push", "-u", "origin", parent_identifier],

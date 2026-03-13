@@ -11,8 +11,10 @@ Linear-driven AI agent. Automatically plans and implements tasks triggered by is
 ### Prerequisites
 
 - Python 3.10+
+- Node.js (for Linear MCP server via `npx`)
 - [Claude Code](https://claude.com/claude-code) CLI
 - [GitHub CLI](https://cli.github.com/) (`gh`)
+- [Linear](https://linear.app/) account with API key
 - `bubblewrap` and `socat` (for sandbox)
 
 ```bash

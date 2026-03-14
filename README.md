@@ -22,10 +22,12 @@ Add the following statuses at Settings → Teams → Issue statuses & automation
 ### OAuth App (Agent API / Webhook)
 
 1. Settings → Account → API → OAuth applications → Create
-2. Webhook URL: `https://<server>:3000/webhook`
-3. Webhook secret を設定
-4. Actor token（actor=application）を生成 → `LINEAR_OAUTH_TOKEN`
-5. Agent 機能を有効化
+2. Enter application name and redirect URL
+3. Webhook URL: `https://<server>:3000/webhook`
+4. Set webhook secret → `LINEAR_WEBHOOK_SECRET`
+5. Generate actor token (actor=application) → `LINEAR_OAUTH_TOKEN`
+6. Enable agent features: Manage → Enable agent features
+
 ## Prerequisites
 
 - Python 3.10+
@@ -78,7 +80,7 @@ bin/forge.sh --interval 300      # polling daemon (300s interval)
 bin/webhook.sh                   # webhook server
 ```
 
-### systemd
+### systemd (Linux)
 
 ```bash
 # Polling service
@@ -90,6 +92,15 @@ bin/service-systemd.sh logs-polling
 bin/service-systemd.sh register-webhook
 bin/service-systemd.sh start-webhook
 bin/service-systemd.sh logs-webhook
+```
+
+### launchd (macOS)
+
+```bash
+bin/service-launchd.sh register
+bin/service-launchd.sh enable
+bin/service-launchd.sh start
+bin/service-launchd.sh logs
 ```
 
 ## Workflow
@@ -117,7 +128,7 @@ Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Impleme
 |------|-------|-----------|
 | Planner | Sonnet + Opus subagent | Sonnet orchestrates, Opus subagent for codebase analysis |
 | Plan Reviewer | Sonnet + Opus subagent | Sonnet orchestrates, Opus subagent for re-investigation |
-| Conductor | Sonnet | Procedural orchestration, cost-efficient |
+| Conductor | Sonnet | Orchestrates implementer + reviewer, commits results |
 | Implementer | Sonnet | Code generation, speed and cost balance |
 | Reviewer | Opus | Deep reasoning for bug and design issue detection |
 | PR Description | Haiku | Simple text generation, low cost |
@@ -127,5 +138,5 @@ Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Impleme
 Each claude CLI execution runs with Claude Code's native sandbox:
 
 - **Filesystem**: Write restricted to work directory + logs + source repo `.git/worktrees`. `~/.ssh`, `~/.aws`, `~/.gnupg` denied.
-- **Network**: `allowManagedDomainsOnly` — only `api.linear.app`, `github.com`, `api.anthropic.com` allowed.
+- **Network**: `allowManagedDomainsOnly` — allows `api.linear.app`, `github.com`, `api.anthropic.com` by default. Configurable via `claude.sandbox.network.allowedDomains` in `settings.json`.
 - **Escape hatch disabled**: `allowUnsandboxedCommands: false`

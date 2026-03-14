@@ -98,32 +98,23 @@ If there are no issues, output only "LGTM".
 
 ### 5. Final Steps (conductor does this)
 
-Execute all of the following yourself:
-
 1. **Commit**:
-   - `git add` only relevant files (do not include unnecessary files)
+   - `git add` only relevant files
    - Message format: `{{ISSUE_IDENTIFIER}}: brief description of changes`
-   - Do NOT push or create a PR (merging and pushing is handled externally)
-2. **Post detailed report as comment on sub-issue** (`save_comment`):
-   Include:
+   - Do NOT push or create a PR
+2. **Result output**: Include the following in your final text output (this will be automatically posted as comments):
    - List of changed files
-   - Summary of changes (what was changed and how)
+   - Summary of changes
    - Test results
    - Number of review loop iterations and final review result
-3. **Post summary comment on parent issue** (`save_comment`, Issue ID: `{{PARENT_ISSUE_ID}}`):
-   Use this format:
-   ```
-   **{{ISSUE_IDENTIFIER}}**: {one-line summary of changes} (merged into {{PARENT_IDENTIFIER}})
-   Details: {link to sub-issue identifier}
-   ```
-4. **Status update**: Done status is set automatically after completion
+3. **Status update**: Done status is set automatically after completion
 
-### On Error
+### Already Implemented
 
-If implementation makes no progress / agent fails with an error:
-- Failed status is set automatically by the forge system
-- Post detailed error information as a comment on the sub-issue
-- Post `**{{ISSUE_IDENTIFIER}}**: Implementation failed — see sub-issue for details` as a comment on the parent issue
+If the required changes are already present in the codebase (e.g., implemented by a prior issue):
+- Do NOT make any commits
+- Output `ALREADY_IMPLEMENTED` followed by an explanation of why no changes are needed
+- Reference the existing commit/code that satisfies the requirements
 
 ## Notes
 

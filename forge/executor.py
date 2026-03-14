@@ -179,7 +179,7 @@ def setup_worktree(phase, repo, issue_identifier, parent_identifier, worktree_ba
     return worktree_dir, worktree_dir
 
 
-def post_execute(phase, issue_id, issue_identifier, parent_identifier, repo,
+def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_identifier, repo,
                  worktree_base, lock_dir, log_file, work_dir=None, base_branch=None):
     if phase == PHASE_PLANNING:
         result = fetch_sub_issues(issue_id)
@@ -190,10 +190,25 @@ def post_execute(phase, issue_id, issue_identifier, parent_identifier, repo,
     elif phase == PHASE_PLAN_REVIEW:
         update_issue_state(issue_id, STATE_PENDING_APPROVAL)
     elif phase == PHASE_IMPLEMENTING:
+        comment_body, raw_json = parse_claude_result(log_file)
+        already_implemented = "ALREADY_IMPLEMENTED" in (comment_body or "")
+
         if work_dir and base_branch and not has_new_commits(str(work_dir), base_branch):
-            mark_failed(issue_id, log_file, reason="No commits were created.")
-            sys.exit(1)
-        update_issue_state(issue_id, STATE_DONE)
+            if already_implemented:
+                if comment_body:
+                    create_comment(issue_id, comment_body)
+                update_issue_state(issue_id, STATE_DONE)
+            else:
+                mark_failed(issue_id, log_file, reason="No commits were created.")
+                sys.exit(1)
+        else:
+            if comment_body:
+                create_comment(issue_id, comment_body)
+            update_issue_state(issue_id, STATE_DONE)
+
+        if parent_issue_id:
+            summary = f"**{issue_identifier}**: {'Already implemented' if already_implemented else 'Implementation complete'}"
+            create_comment(parent_issue_id, summary)
     elif phase == PHASE_REVIEW:
         update_issue_state(issue_id, STATE_IN_REVIEW)
 
@@ -248,8 +263,8 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
         if phase == PHASE_IMPLEMENTING:
             base_branch = parent_identifier if parent_identifier else detect_default_branch(str(repo))
 
-        post_execute(phase, issue_id, issue_identifier, parent_identifier,
-                     repo, worktree_base, lock_dir, log_file,
+        post_execute(phase, issue_id, issue_identifier, parent_issue_id,
+                     parent_identifier, repo, worktree_base, lock_dir, log_file,
                      work_dir=work_dir, base_branch=base_branch)
     finally:
         lock_file.unlink(missing_ok=True)

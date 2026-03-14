@@ -120,6 +120,6 @@ Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Impleme
 
 Each claude CLI execution runs with Claude Code's native sandbox:
 
-- **Filesystem**: Write restricted to work directory + logs. `~/.ssh`, `~/.aws`, `~/.gnupg` denied.
+- **Filesystem**: Write restricted to work directory + logs + source repo `.git/worktrees`. `~/.ssh`, `~/.aws`, `~/.gnupg` denied.
 - **Network**: `allowManagedDomainsOnly` — only `api.linear.app`, `github.com`, `api.anthropic.com` allowed.
 - **Escape hatch disabled**: `allowUnsandboxedCommands: false`

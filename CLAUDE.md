@@ -13,7 +13,7 @@ Linear-driven AI agent. Automatically plans and implements tasks triggered by is
   - `claude.py` — Claude CLI execution, sandbox settings
   - `orchestrator.py` — Polling, dispatch, PR creation
   - `executor.py` — Per-issue execution (prompt, worktree, post-processing)
-- `bin/` — Shell scripts only (`main.sh`, `daemon.sh`, `service-systemd.sh`, `check_cycle.py`)
+- `bin/` — Shell scripts (`main.sh`, `daemon.sh`, `service-systemd.sh`, `service-launchd.sh`, `check_cycle.py`)
 - `prompts/` — Prompt templates for each phase
 - `config/settings.json` — Configuration values (git ignored)
 - `config/secrets.env` — Credentials (git ignored)

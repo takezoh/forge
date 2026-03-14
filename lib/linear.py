@@ -78,7 +78,7 @@ def poll(status: str, env=None) -> list[dict]:
         env = load_env()
     api_key = get_api_key(env)
     if not api_key:
-        print("LINEAR_API_KEY not set", file=sys.stderr)
+        print("LINEAR_OAUTH_TOKEN not set", file=sys.stderr)
         sys.exit(1)
 
     team_id = env["LINEAR_TEAM_ID"]
@@ -251,7 +251,7 @@ def fetch_sub_issues(parent_id: str, env=None) -> dict:
         env = load_env()
     api_key = get_api_key(env)
     if not api_key:
-        print("LINEAR_API_KEY not set", file=sys.stderr)
+        print("LINEAR_OAUTH_TOKEN not set", file=sys.stderr)
         sys.exit(1)
 
     data = graphql(api_key, SUB_ISSUES_QUERY, {"parentId": parent_id})

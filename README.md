@@ -56,7 +56,7 @@ sudo apt-get install bubblewrap socat
    - `log_dir`, `lock_dir`, `worktree_dir` — directory paths (required)
    - Optional: `model`, `budget`, `max_turns`, `max_concurrent`, `sandbox`
 
-3. Edit `config/secrets.env` — set `LINEAR_API_KEY` (and `LINEAR_OAUTH_TOKEN`, `LINEAR_WEBHOOK_SECRET` if using Webhook)
+3. Edit `config/secrets.env` — set `LINEAR_OAUTH_TOKEN` (and `LINEAR_WEBHOOK_SECRET` if using Webhook)
 
 4. Edit `config/repos.conf` — map labels to repository paths:
    ```

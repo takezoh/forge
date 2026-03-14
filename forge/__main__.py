@@ -74,15 +74,15 @@ def check():
         ok("config/secrets.env")
         api_key = ""
         for line in secrets_path.read_text().splitlines():
-            if line.startswith("LINEAR_API_KEY="):
+            if line.startswith("LINEAR_OAUTH_TOKEN="):
                 api_key = line.split("=", 1)[1].strip().strip("\"'")
         if not api_key:
-            fail("  LINEAR_API_KEY is not set in secrets.env")
+            fail("  LINEAR_OAUTH_TOKEN is not set in secrets.env")
             errors += 1
     else:
         warn("config/secrets.env not found — copying from example")
         shutil.copy(config_dir / "secrets.env.example", secrets_path)
-        ok("Created config/secrets.env (please fill in LINEAR_API_KEY)")
+        ok("Created config/secrets.env (please fill in LINEAR_OAUTH_TOKEN)")
         errors += 1
 
     repos_path = config_dir / "repos.conf"

@@ -62,10 +62,10 @@ def load_env():
 
 def get_api_key(env=None):
     if env:
-        key = env.get("LINEAR_OAUTH_TOKEN") or env.get("LINEAR_API_KEY")
+        key = env.get("LINEAR_OAUTH_TOKEN")
         if key:
             return key
-    return os.environ.get("LINEAR_OAUTH_TOKEN") or os.environ.get("LINEAR_API_KEY", "")
+    return os.environ.get("LINEAR_OAUTH_TOKEN", "")
 
 
 def parse_labels(label_nodes) -> list[str]:

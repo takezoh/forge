@@ -7,9 +7,9 @@ from .config import FORGE_ROOT, load_env
 from .constants import (STATE_PENDING_APPROVAL, STATE_DONE, STATE_IN_REVIEW,
                         STATE_FAILED, PHASE_PLANNING, PHASE_IMPLEMENTING,
                         PHASE_REVIEW, PHASE_PLAN_REVIEW)
-from .git import (detect_default_branch, worktree_add, worktree_remove,
-                  merge, merge_abort, push, delete_branch, pr_diff,
-                  fetch_pr_review_comments)
+from .git import (detect_default_branch, has_new_commits, worktree_add,
+                  worktree_remove, merge, merge_abort, push, delete_branch,
+                  pr_diff, fetch_pr_review_comments)
 from .claude import run as run_claude
 from .linear import (update_issue_state, create_comment, fetch_issue_detail,
                      fetch_issue_comments, fetch_todo_state_id, fetch_sub_issues)
@@ -36,7 +36,6 @@ DISALLOWED_TOOLS_MAP = {
     ],
 }
 
-
 def resolve_config(phase: str, env: dict) -> dict:
     model_key = f"FORGE_MODEL_{phase.upper()}"
     budget_key = f"FORGE_BUDGET_{phase.upper()}"
@@ -55,14 +54,19 @@ def resolve_config(phase: str, env: dict) -> dict:
     }
 
 
-def mark_failed(issue_id: str, log_file: Path):
+def mark_failed(issue_id: str, log_file: Path, reason: str = ""):
     tail = ""
     if log_file.exists():
         lines = log_file.read_text().splitlines()
         tail = "\n".join(lines[-20:])
 
     update_issue_state(issue_id, STATE_FAILED)
-    body = f"Execution failed.\n\n```\n{tail}\n```" if tail else "Execution failed."
+    parts = []
+    if reason:
+        parts.append(reason)
+    if tail:
+        parts.append(f"```\n{tail}\n```")
+    body = "\n\n".join(parts) or "Execution failed."
     create_comment(issue_id, body)
 
 
@@ -77,6 +81,7 @@ def prepare_prompt(phase, issue_id, issue_identifier, parent_issue_id, parent_id
     prompt = prompt.replace("{{ISSUE_IDENTIFIER}}", issue_identifier)
     prompt = prompt.replace("{{PARENT_ISSUE_ID}}", parent_issue_id)
     prompt = prompt.replace("{{PARENT_IDENTIFIER}}", parent_identifier)
+    prompt = prompt.replace("{{FORGE_ROOT}}", str(FORGE_ROOT))
 
     if phase == PHASE_PLANNING:
         issue_detail = fetch_issue_detail(issue_id)
@@ -150,12 +155,19 @@ def setup_worktree(phase, repo, issue_identifier, parent_identifier, worktree_ba
 
 
 def post_execute(phase, issue_id, issue_identifier, parent_identifier, repo,
-                 worktree_base, lock_dir, log_file):
+                 worktree_base, lock_dir, log_file, work_dir=None, base_branch=None):
     if phase == PHASE_PLANNING:
+        result = fetch_sub_issues(issue_id)
+        if not result.get("sub_issues"):
+            mark_failed(issue_id, log_file, reason="Planning completed but no sub-issues were created.")
+            sys.exit(1)
         update_issue_state(issue_id, STATE_PENDING_APPROVAL)
     elif phase == PHASE_PLAN_REVIEW:
         update_issue_state(issue_id, STATE_PENDING_APPROVAL)
     elif phase == PHASE_IMPLEMENTING:
+        if work_dir and base_branch and not has_new_commits(str(work_dir), base_branch):
+            mark_failed(issue_id, log_file, reason="No commits were created.")
+            sys.exit(1)
         update_issue_state(issue_id, STATE_DONE)
     elif phase == PHASE_REVIEW:
         update_issue_state(issue_id, STATE_IN_REVIEW)
@@ -206,8 +218,13 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
             mark_failed(issue_id, log_file)
             sys.exit(1)
 
+        base_branch = None
+        if phase == PHASE_IMPLEMENTING:
+            base_branch = parent_identifier if parent_identifier else detect_default_branch(str(repo))
+
         post_execute(phase, issue_id, issue_identifier, parent_identifier,
-                     repo, worktree_base, lock_dir, log_file)
+                     repo, worktree_base, lock_dir, log_file,
+                     work_dir=work_dir, base_branch=base_branch)
     finally:
         lock_file.unlink(missing_ok=True)
         if worktree_dir and worktree_dir.exists():

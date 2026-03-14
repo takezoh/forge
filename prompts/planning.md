@@ -53,7 +53,7 @@ Convert each work unit into a sub-issue using `save_issue`.
 After creating sub-issues, verify there are no cycles in the dependency graph:
 
 ```bash
-python /home/take/dev/forge/bin/check_cycle.py <parent_issue_id>
+python {{FORGE_ROOT}}/bin/check_cycle.py <parent_issue_id>
 ```
 
 - If output is "OK" → proceed to step 6

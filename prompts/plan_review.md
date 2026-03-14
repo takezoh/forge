@@ -51,7 +51,7 @@ Make targeted changes to sub-issues:
 ### 5. Dependency Cycle Check
 After modifying sub-issues:
 ```bash
-python /home/take/dev/forge/bin/check_cycle.py {{ISSUE_ID}}
+python {{FORGE_ROOT}}/bin/check_cycle.py {{ISSUE_ID}}
 ```
 
 ### 6. Completion

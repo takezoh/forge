@@ -78,6 +78,14 @@ def delete_branch(repo_path: str, branch: str):
     )
 
 
+def has_new_commits(work_dir: str, base: str) -> bool:
+    ret = subprocess.run(
+        ["git", "-C", work_dir, "rev-list", "--count", f"{base}..HEAD"],
+        capture_output=True, text=True,
+    )
+    return ret.returncode == 0 and int(ret.stdout.strip() or "0") > 0
+
+
 def diff_stat(repo_path: str, base: str, head: str) -> str:
     ret = subprocess.run(
         ["git", "-C", repo_path, "diff", "--stat", f"{base}...{head}"],

@@ -37,6 +37,10 @@ def load_env():
             continue
         env[f"FORGE_MODEL_{phase.upper()}"] = str(val)
 
+    if "webhook" in cfg:
+        env["WEBHOOK_HOST"] = cfg["webhook"]["host"]
+        env["WEBHOOK_PORT"] = str(cfg["webhook"]["port"])
+
     secrets_path = config_dir / "secrets.env"
     if secrets_path.exists():
         with open(secrets_path) as f:
@@ -56,10 +60,10 @@ def load_env():
 
 def get_api_key(env=None):
     if env:
-        key = env.get("LINEAR_API_KEY")
+        key = env.get("LINEAR_OAUTH_TOKEN") or env.get("LINEAR_API_KEY")
         if key:
             return key
-    return os.environ.get("LINEAR_API_KEY", "")
+    return os.environ.get("LINEAR_OAUTH_TOKEN") or os.environ.get("LINEAR_API_KEY", "")
 
 
 def parse_labels(label_nodes) -> list[str]:

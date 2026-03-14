@@ -1,4 +1,5 @@
 import sys
+import time
 
 import httpx
 
@@ -7,13 +8,29 @@ from config.constants import TERMINAL_STATES, STATE_DONE, STATE_TODO
 
 
 def graphql(api_key: str, query: str, variables: dict = None) -> dict:
-    resp = httpx.post(
-        "https://api.linear.app/graphql",
-        json={"query": query, "variables": variables or {}},
-        headers={"Authorization": api_key},
-    )
-    resp.raise_for_status()
-    return resp.json()
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            resp = httpx.post(
+                "https://api.linear.app/graphql",
+                json={"query": query, "variables": variables or {}},
+                headers={"Authorization": api_key},
+            )
+        except httpx.HTTPError as e:
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                print(f"[graphql] connection error, retrying in {wait}s (attempt {attempt + 1}/{max_retries}): {e}", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            raise
+        if resp.status_code >= 500 and attempt < max_retries:
+            wait = 2 ** attempt
+            print(f"[graphql] {resp.status_code} error, retrying in {wait}s (attempt {attempt + 1}/{max_retries})", file=sys.stderr)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise httpx.HTTPStatusError("retries exhausted", request=resp.request, response=resp)
 
 TEAM_QUERY = """
 query($teamName: String!) {

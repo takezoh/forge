@@ -84,7 +84,10 @@ def create_parent_pr(parent_identifier: str, parent_title: str, repo_path: str,
         pr_lock.unlink(missing_ok=True)
         return
 
-    update_issue_state(parent_id, STATE_IN_REVIEW)
+    try:
+        update_issue_state(parent_id, STATE_IN_REVIEW)
+    except Exception as e:
+        log(f"  Error updating state for {parent_identifier}: {e}")
 
     parent_worktree = Path(env["FORGE_WORKTREE_DIR"]) / Path(repo_path).name / parent_identifier
     if parent_worktree.exists():
@@ -152,16 +155,32 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
     session_map.update(queued)
 
     log("Polling Planning issues...")
-    planning_issues = poll(STATE_PLANNING)
+    try:
+        planning_issues = poll(STATE_PLANNING, env=env)
+    except Exception as e:
+        log(f"Error polling {STATE_PLANNING}: {e}")
+        planning_issues = []
 
     log("Polling Implementing issues...")
-    implementing_issues = poll(STATE_IMPLEMENTING)
+    try:
+        implementing_issues = poll(STATE_IMPLEMENTING, env=env)
+    except Exception as e:
+        log(f"Error polling {STATE_IMPLEMENTING}: {e}")
+        implementing_issues = []
 
     log("Polling Plan Changes Requested issues...")
-    plan_review_issues = poll(STATE_PLAN_CHANGES_REQUESTED)
+    try:
+        plan_review_issues = poll(STATE_PLAN_CHANGES_REQUESTED, env=env)
+    except Exception as e:
+        log(f"Error polling {STATE_PLAN_CHANGES_REQUESTED}: {e}")
+        plan_review_issues = []
 
     log("Polling Changes Requested issues...")
-    review_issues = poll(STATE_CHANGES_REQUESTED)
+    try:
+        review_issues = poll(STATE_CHANGES_REQUESTED, env=env)
+    except Exception as e:
+        log(f"Error polling {STATE_CHANGES_REQUESTED}: {e}")
+        review_issues = []
 
     dispatched = False
 
@@ -192,7 +211,11 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                 continue
 
             log(f"  Fetching sub-issues for {parent_identifier}...")
-            result = fetch_sub_issues(parent_id)
+            try:
+                result = fetch_sub_issues(parent_id)
+            except Exception as e:
+                log(f"  Error fetching sub-issues for {parent_identifier}: {e}")
+                continue
             sub_issues = result["sub_issues"]
 
             if result.get("cycle"):
@@ -229,7 +252,10 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                                    parent_id=parent_id, parent_identifier=parent_identifier,
                                    session_id=sub_sid)
                 if p:
-                    update_issue_state(sub["id"], STATE_IN_PROGRESS)
+                    try:
+                        update_issue_state(sub["id"], STATE_IN_PROGRESS)
+                    except Exception as e:
+                        log(f"  Error updating state for {sub['identifier']}: {e}")
                     dispatched = True
 
             all_done = all(s.get("state") == STATE_DONE for s in sub_issues) and len(sub_issues) > 0

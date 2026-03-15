@@ -85,7 +85,7 @@ sudo apt-get install bubblewrap socat
 ```bash
 bin/forge.sh --check    # check environment
 bin/forge.sh            # start polling daemon
-bin/webhook.sh          # webhook server
+bin/sleipnir.sh         # webhook server
 ```
 
 ### systemd (Linux)

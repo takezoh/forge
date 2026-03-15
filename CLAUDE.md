@@ -19,7 +19,7 @@ Linear-driven AI agent. Automatically plans and implements tasks triggered by is
 - `agent/` — Sleipnir: webhook server (frontend)
   - `__main__.py` — Entry point (`python -m agent`)
   - `webhook.py` — Linear Agent API webhook
-- `bin/` — Shell scripts (`forge.sh`, `webhook.sh`, `service-systemd.sh`, `service-launchd.sh`)
+- `bin/` — Shell scripts (`forge.sh`, `sleipnir.sh`, `service-systemd.sh`, `service-launchd.sh`)
 - `scripts/` — Utility scripts (`check_cycle.py`)
 - `prompts/` — Prompt templates for each phase
 - `config/settings.json` — Configuration values (git ignored, do NOT commit)

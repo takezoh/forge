@@ -1,6 +1,6 @@
 # Loki
 
-Linear-driven AI agent. Automatically plans and implements tasks triggered by issue status changes.
+Automate the full dev cycle—from Linear issue to PR—by autonomously investigating, planning, implementing, and handling reviews.
 
 ## Structure
 

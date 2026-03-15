@@ -1,8 +1,8 @@
 # Loki
 
-Linear-driven AI agent. Automatically plans and implements tasks triggered by issue status changes.
+Automate the full dev cycle—from Linear issue to PR—by autonomously investigating, planning, implementing, and handling reviews.
 
-When a Linear issue changes status, Loki uses Claude Code CLI to automatically investigate code, create plans, implement changes, and respond to reviews — producing a GitHub PR as the final output.
+Triggered by Linear status changes, Loki runs Claude Code CLI in isolated worktrees to execute each phase of the workflow.
 
 Two-process architecture:
 

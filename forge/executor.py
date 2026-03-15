@@ -243,8 +243,6 @@ def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_iden
             summary = f"**{issue_identifier}**: {'Already implemented' if already_implemented else 'Implementation complete'}"
             create_comment(parent_issue_id, summary)
 
-        pid_file = (env or {}).get("FORGE_PID_FILE", "")
-        wake(pid_file)
     elif phase == PHASE_REVIEW:
         update_issue_state(issue_id, STATE_IN_REVIEW)
 
@@ -261,6 +259,9 @@ def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_iden
                 mark_failed(issue_id, log_file, session_id=session_id, api_key=api_key)
                 sys.exit(1)
             push(str(parent_wt), parent_identifier)
+
+    pid_file = (env or {}).get("FORGE_PID_FILE", "")
+    wake(pid_file)
 
 
 def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,

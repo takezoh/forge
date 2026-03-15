@@ -20,7 +20,7 @@ Connect at Settings → Integrations → GitHub. Required for automatic PR synci
 ### Issue Statuses
 
 Add the following statuses at Settings → Teams → Issue statuses & automations:
-- Planning, Pending Approval, Plan Changes Requested, Implementing, Changes Requested, Failed
+- Planning, Pending Approval, Implementing, Changes Requested, Failed
 
 (Backlog, In Review, Done, Cancelled exist by default in Linear)
 

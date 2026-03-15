@@ -4,7 +4,7 @@ import time
 import httpx
 
 from config import load_env, get_api_key, parse_labels
-from config.constants import TERMINAL_STATES, STATE_DONE, STATE_TODO
+from config.constants import END_STATES, STATE_DONE, STATE_TODO
 
 
 def graphql(api_key: str, query: str, variables: dict = None) -> dict:
@@ -193,7 +193,7 @@ def update_issue_state(issue_id: str, state_name: str, env=None):
 
 def is_ready(node: dict) -> bool:
     state_name = node.get("state", {}).get("name", "")
-    if state_name in TERMINAL_STATES:
+    if state_name != STATE_TODO:
         return False
     for rel in node.get("inverseRelations", {}).get("nodes", []):
         if rel["type"] == "blocks":

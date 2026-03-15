@@ -10,24 +10,12 @@ from pathlib import Path
 from flask import Flask, request, jsonify
 
 from config import FORGE_ROOT, load_env, load_repos, resolve_repo, get_api_key
-from config.constants import (STATE_PLANNING, STATE_IMPLEMENTING,
-                        STATE_PLAN_CHANGES_REQUESTED, STATE_CHANGES_REQUESTED,
-                        STATE_PLAN_APPROVED,
-                        PHASE_PLANNING, PHASE_IMPLEMENTING,
-                        PHASE_REVIEW, PHASE_PLAN_REVIEW,
-                        PHASE_SUBISSUE_CREATION)
+from config.constants import (STATE_PLANNING, STATE_TO_PHASE,
+                        PHASE_PLANNING)
 from lib.linear import emit_thought, emit_response, emit_error, fetch_issue_detail, fetch_issue_state, update_issue_state
 from forge.queue import enqueue, wake
 
 app = Flask(__name__)
-
-STATE_TO_PHASE = {
-    STATE_PLANNING: PHASE_PLANNING,
-    STATE_IMPLEMENTING: PHASE_IMPLEMENTING,
-    STATE_PLAN_APPROVED: PHASE_SUBISSUE_CREATION,
-    STATE_PLAN_CHANGES_REQUESTED: PHASE_PLAN_REVIEW,
-    STATE_CHANGES_REQUESTED: PHASE_REVIEW,
-}
 
 
 def _verify_signature(body: bytes, signature: str, secret: str) -> bool:

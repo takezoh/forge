@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import signal
@@ -10,11 +11,9 @@ from pathlib import Path
 
 from config import FORGE_ROOT, load_env, load_repos, resolve_repo
 from config.constants import (STATE_PLANNING, STATE_IMPLEMENTING,
-                        STATE_PLAN_CHANGES_REQUESTED, STATE_CHANGES_REQUESTED,
-                        STATE_PLAN_APPROVED,
-                        STATE_IN_PROGRESS, STATE_IN_REVIEW, STATE_DONE)
-from lib.git import branch_exists, create_branch, detect_default_branch, worktree_add, worktree_remove, pr_create
-from lib.claude import generate_pr_body
+                        STATE_CHANGES_REQUESTED,
+                        STATE_IN_PROGRESS, STATE_DONE,
+                        PHASE_PLAN_REVIEW, PHASE_SUBISSUE_CREATION)
 from lib.linear import poll, fetch_sub_issues, update_issue_state
 from forge.queue import dequeue_all
 
@@ -40,12 +39,28 @@ def log(msg: str):
     print(f"[{datetime.now():%H:%M:%S}] {msg}")
 
 
-def reap_children():
+def reap_children(lock_dir: Path):
+    reaped_pids = set()
     while True:
         try:
-            os.waitpid(-1, os.WNOHANG)
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+            if pid == 0:
+                break
+            reaped_pids.add(pid)
         except ChildProcessError:
             break
+    if not reaped_pids:
+        return
+    for lock in lock_dir.glob("*.lock"):
+        if not _UUID_RE.match(lock.name):
+            continue
+        try:
+            lines = lock.read_text().splitlines()
+            pid = int(lines[1]) if len(lines) > 1 else 0
+            if pid in reaped_pids:
+                lock.unlink(missing_ok=True)
+        except (ValueError, OSError):
+            pass
 
 
 def consume_queue(queue_dir: str) -> dict[str, dict]:
@@ -59,46 +74,6 @@ def consume_queue(queue_dir: str) -> dict[str, dict]:
                 "phase": item.get("phase", ""),
             }
     return session_map
-
-
-def create_parent_pr(parent_identifier: str, parent_title: str, repo_path: str,
-                     parent_id: str, lock_dir: Path, env: dict,
-                     sub_issues: list[dict] | None = None):
-    pr_lock = lock_dir / f"pr-{parent_identifier}.lock"
-    if pr_lock.exists():
-        log(f"  Skip PR creation for {parent_identifier} (already created)")
-        return
-
-    pr_lock.write_text(parent_identifier)
-
-    parent_worktree = Path(env["FORGE_WORKTREE_DIR"]) / Path(repo_path).name / parent_identifier
-    if not parent_worktree.exists():
-        parent_worktree.parent.mkdir(parents=True, exist_ok=True)
-        worktree_add(repo_path, str(parent_worktree), parent_identifier)
-
-    log(f"  Generating PR description for {parent_identifier}...")
-    title, body = generate_pr_body(parent_id, parent_identifier, repo_path,
-                                   sub_issues or [], env,
-                                   work_dir=str(parent_worktree))
-
-    default_branch = detect_default_branch(repo_path)
-    ret = pr_create(repo_path, f"{parent_identifier}: {title}", body,
-                    parent_identifier, default_branch)
-    if ret.returncode == 0:
-        log(f"  Created PR for {parent_identifier}")
-    else:
-        log(f"  Failed to create PR for {parent_identifier}: {ret.stderr}")
-        pr_lock.unlink(missing_ok=True)
-        return
-
-    try:
-        update_issue_state(parent_id, STATE_IN_REVIEW)
-    except Exception as e:
-        log(f"  Error updating state for {parent_identifier}: {e}")
-
-    parent_worktree = Path(env["FORGE_WORKTREE_DIR"]) / Path(repo_path).name / parent_identifier
-    if parent_worktree.exists():
-        worktree_remove(repo_path, str(parent_worktree))
 
 
 def dispatch_issue(phase: str, issue: dict, lock_dir: Path, max_concurrent: int,
@@ -177,20 +152,6 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
         log(f"Error polling {STATE_IMPLEMENTING}: {e}")
         implementing_issues = []
 
-    log("Polling Plan Approved issues...")
-    try:
-        plan_approved_issues = poll(STATE_PLAN_APPROVED, env=env)
-    except Exception as e:
-        log(f"Error polling {STATE_PLAN_APPROVED}: {e}")
-        plan_approved_issues = []
-
-    log("Polling Plan Changes Requested issues...")
-    try:
-        plan_review_issues = poll(STATE_PLAN_CHANGES_REQUESTED, env=env)
-    except Exception as e:
-        log(f"Error polling {STATE_PLAN_CHANGES_REQUESTED}: {e}")
-        plan_review_issues = []
-
     log("Polling Changes Requested issues...")
     try:
         review_issues = poll(STATE_CHANGES_REQUESTED, env=env)
@@ -204,16 +165,13 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
         log(f"{len(planning_issues)} planning issue(s) found")
         for issue in planning_issues:
             sid = session_map.get(issue["id"], {}).get("session_id", "")
-            p = dispatch_issue("planning", issue, lock_dir, max_concurrent, repos,
-                               session_id=sid)
-            if p:
-                dispatched = True
-
-    if plan_approved_issues:
-        log(f"{len(plan_approved_issues)} plan approved issue(s) found")
-        for issue in plan_approved_issues:
-            sid = session_map.get(issue["id"], {}).get("session_id", "")
-            p = dispatch_issue("subissue_creation", issue, lock_dir, max_concurrent, repos,
+            try:
+                result = fetch_sub_issues(issue["id"])
+                has_document = bool(result.get("documents"))
+            except Exception:
+                has_document = False
+            phase = PHASE_PLAN_REVIEW if has_document else "planning"
+            p = dispatch_issue(phase, issue, lock_dir, max_concurrent, repos,
                                session_id=sid)
             if p:
                 dispatched = True
@@ -247,22 +205,17 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                 log(f"  Skip {parent_identifier} (dependency cycle: {' -> '.join(result['cycle'])})")
                 continue
 
-            if not branch_exists(repo_path, parent_identifier):
-                default_branch = detect_default_branch(repo_path)
-                br_ret = create_branch(repo_path, parent_identifier, default_branch)
-                if br_ret.returncode != 0:
-                    log(f"  Failed to create parent branch {parent_identifier} from {default_branch}: {br_ret.stderr.strip()}")
-                    continue
-                log(f"  Created parent branch: {parent_identifier} (from {default_branch})")
-
-            parent_worktree = Path(env["FORGE_WORKTREE_DIR"]) / Path(repo_path).name / parent_identifier
-            if not parent_worktree.exists():
-                parent_worktree.parent.mkdir(parents=True, exist_ok=True)
-                worktree_add(repo_path, str(parent_worktree), parent_identifier)
-                log(f"  Created parent worktree: {parent_worktree}")
+            if not sub_issues:
+                log(f"  {parent_identifier}: no sub-issues, dispatching subissue_creation")
+                sid = session_map.get(parent_id, {}).get("session_id", "")
+                p = dispatch_issue(PHASE_SUBISSUE_CREATION, parent, lock_dir, max_concurrent, repos,
+                                   session_id=sid)
+                if p:
+                    dispatched = True
+                continue
 
             ready = [s for s in sub_issues if s.get("ready")]
-            done = [s for s in sub_issues if s.get("state") in (STATE_DONE, STATE_IN_REVIEW)]
+            done = [s for s in sub_issues if s.get("state") == STATE_DONE]
             log(f"  {parent_identifier}: {len(sub_issues)} sub-issues, {len(ready)} ready, {len(done)} done")
 
             for sub in ready:
@@ -285,17 +238,16 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
 
             all_done = all(s.get("state") == STATE_DONE for s in sub_issues) and len(sub_issues) > 0
             if all_done:
-                create_parent_pr(parent_identifier, parent["title"], repo_path,
-                                 parent_id, lock_dir, env, sub_issues=sub_issues)
-
-    if plan_review_issues:
-        log(f"{len(plan_review_issues)} plan review issue(s) found")
-        for issue in plan_review_issues:
-            sid = session_map.get(issue["id"], {}).get("session_id", "")
-            p = dispatch_issue("plan_review", issue, lock_dir, max_concurrent, repos,
-                               session_id=sid)
-            if p:
-                dispatched = True
+                pr_lock = lock_dir / f"pr-{parent_identifier}.lock"
+                if pr_lock.exists():
+                    log(f"  Skip PR creation for {parent_identifier} (already created)")
+                else:
+                    pr_lock.write_text(parent_identifier)
+                    cmd = [sys.executable, "-m", "forge.pr_creator",
+                           parent_identifier, parent["title"], repo_path,
+                           parent_id, json.dumps(sub_issues)]
+                    subprocess.Popen(cmd, cwd=str(FORGE_ROOT))
+                    log(f"  Started PR creation for {parent_identifier}")
 
     if review_issues:
         log(f"{len(review_issues)} review feedback issue(s) found")
@@ -325,13 +277,15 @@ def main(interval: int = 300):
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGUSR1, _wake_handler)
+    signal.signal(signal.SIGCHLD, _wake_handler)
     signal.signal(signal.SIGINT, _int_handler)
 
     log(f"=== forge daemon (interval={interval}s) ===")
     try:
         while True:
             event.clear()
-            reap_children()
+            lock_dir = Path(env["FORGE_LOCK_DIR"])
+            reap_children(lock_dir)
             dispatched = run_once(env)
             if dispatched:
                 event.wait(interval)

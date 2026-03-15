@@ -7,9 +7,9 @@ from datetime import datetime
 from pathlib import Path
 
 from config import FORGE_ROOT, load_env, get_api_key
-from config.constants import (STATE_PENDING_APPROVAL, STATE_PLAN_APPROVED,
+from config.constants import (STATE_PENDING_APPROVAL,
                         STATE_DONE, STATE_IN_REVIEW, STATE_IMPLEMENTING,
-                        STATE_FAILED, STATE_TODO, TERMINAL_STATES,
+                        STATE_FAILED, STATE_TODO, END_STATES,
                         PHASE_PLANNING, PHASE_IMPLEMENTING,
                         PHASE_REVIEW, PHASE_PLAN_REVIEW,
                         PHASE_SUBISSUE_CREATION)
@@ -18,9 +18,9 @@ from lib.linear import (emit_thought, emit_action, emit_response, emit_error,
                         fetch_issue_detail, fetch_issue_comments, fetch_sub_issues)
 from lib.git import (detect_default_branch, has_new_commits, worktree_add,
                   worktree_remove, merge, merge_abort, push, delete_branch,
+                  branch_exists, create_branch,
                   pr_diff, fetch_pr_review_comments)
 from lib.claude import run as run_claude, get_current_process
-from forge.queue import wake
 
 PHASE_TIMEOUTS = {
     "planning": 30 * 60,
@@ -172,14 +172,25 @@ def setup_worktree(phase, repo, issue_identifier, parent_identifier, worktree_ba
     worktree_dir.parent.mkdir(parents=True, exist_ok=True)
 
     if phase in (PHASE_PLANNING, PHASE_PLAN_REVIEW, PHASE_SUBISSUE_CREATION):
+        if worktree_dir.exists():
+            worktree_remove(str(repo), str(worktree_dir))
         default_branch = detect_default_branch(str(repo))
         ret = worktree_add(str(repo), str(worktree_dir), default_branch, detach=True)
         if ret.returncode != 0:
-            mark_failed(issue_id, log_file, session_id=session_id, api_key=api_key)
+            mark_failed(issue_id, log_file,
+                        reason=f"Failed to create worktree: {ret.stderr.strip()}",
+                        session_id=session_id, api_key=api_key)
             sys.exit(1)
         return worktree_dir, worktree_dir
 
     if phase == PHASE_IMPLEMENTING:
+        if parent_identifier and not branch_exists(str(repo), parent_identifier):
+            default_branch = detect_default_branch(str(repo))
+            create_branch(str(repo), parent_identifier, default_branch)
+
+        if worktree_dir.exists():
+            worktree_remove(str(repo), str(worktree_dir))
+
         base_branch = parent_identifier if parent_identifier else detect_default_branch(str(repo))
         ret = worktree_add(str(repo), str(worktree_dir), base_branch, new_branch=issue_identifier)
         if ret.returncode != 0:
@@ -187,13 +198,19 @@ def setup_worktree(phase, repo, issue_identifier, parent_identifier, worktree_ba
             ret = worktree_add(str(repo), str(worktree_dir), issue_identifier)
             if ret.returncode != 0:
                 print(f"Failed to create worktree for {issue_identifier}: {ret.stderr.strip()}", file=sys.stderr)
-                mark_failed(issue_id, log_file, session_id=session_id, api_key=api_key)
+                mark_failed(issue_id, log_file,
+                            reason=f"Failed to create worktree: {ret.stderr.strip()}",
+                            session_id=session_id, api_key=api_key)
                 sys.exit(1)
     elif phase == PHASE_REVIEW:
+        if worktree_dir.exists():
+            worktree_remove(str(repo), str(worktree_dir))
         ret = worktree_add(str(repo), str(worktree_dir), issue_identifier)
         if ret.returncode != 0:
             print(f"Failed to create worktree for review {issue_identifier}: {ret.stderr.strip()}", file=sys.stderr)
-            mark_failed(issue_id, log_file, session_id=session_id, api_key=api_key)
+            mark_failed(issue_id, log_file,
+                        reason=f"Failed to create worktree: {ret.stderr.strip()}",
+                        session_id=session_id, api_key=api_key)
             sys.exit(1)
 
     return worktree_dir, worktree_dir
@@ -201,13 +218,13 @@ def setup_worktree(phase, repo, issue_identifier, parent_identifier, worktree_ba
 
 def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_identifier, repo,
                  worktree_base, lock_dir, log_file, work_dir=None, base_branch=None,
-                 session_id="", api_key="", env=None):
+                 session_id="", api_key=""):
     if phase in (PHASE_PLANNING, PHASE_PLAN_REVIEW):
         comment_body, raw_json = parse_claude_result(log_file)
         if comment_body:
             create_comment(issue_id, comment_body)
         if "AUTO_APPROVED" in (comment_body or ""):
-            update_issue_state(issue_id, STATE_PLAN_APPROVED)
+            update_issue_state(issue_id, STATE_IMPLEMENTING)
         else:
             update_issue_state(issue_id, STATE_PENDING_APPROVAL)
     elif phase == PHASE_SUBISSUE_CREATION:
@@ -216,7 +233,7 @@ def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_iden
             mark_failed(issue_id, log_file, reason="Sub-issue creation completed but no sub-issues were created.", session_id=session_id, api_key=api_key)
             sys.exit(1)
         for sub in result["sub_issues"]:
-            if sub["state"] != STATE_TODO and sub["state"] not in TERMINAL_STATES:
+            if sub["state"] != STATE_TODO and sub["state"] not in END_STATES:
                 update_issue_state(sub["id"], STATE_TODO)
         comment_body, raw_json = parse_claude_result(log_file)
         if comment_body:
@@ -252,6 +269,9 @@ def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_iden
         parent_wt = worktree_base / repo.name / parent_identifier
         with open(merge_lock, "w") as lf:
             fcntl.flock(lf, fcntl.LOCK_EX)
+            if not parent_wt.exists():
+                parent_wt.parent.mkdir(parents=True, exist_ok=True)
+                worktree_add(str(repo), str(parent_wt), parent_identifier)
             merge_ret = merge(str(parent_wt), issue_identifier,
                               f"Merge {issue_identifier}")
             if merge_ret.returncode != 0:
@@ -259,9 +279,6 @@ def post_execute(phase, issue_id, issue_identifier, parent_issue_id, parent_iden
                 mark_failed(issue_id, log_file, session_id=session_id, api_key=api_key)
                 sys.exit(1)
             push(str(parent_wt), parent_identifier)
-
-    pid_file = (env or {}).get("FORGE_PID_FILE", "")
-    wake(pid_file)
 
 
 def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
@@ -273,7 +290,6 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
     log_dir = Path(env["FORGE_LOG_DIR"])
     lock_dir = Path(env["FORGE_LOCK_DIR"])
     log_file = log_dir / f"{issue_identifier}-{datetime.now():%Y%m%d-%H%M%S}.log"
-    lock_file = lock_dir / f"{issue_id}.lock"
     worktree_base = Path(env["FORGE_WORKTREE_DIR"])
     repo = Path(repo_path)
 
@@ -336,12 +352,11 @@ def run(phase: str, issue_id: str, issue_identifier: str, repo_path: str,
         post_execute(phase, issue_id, issue_identifier, parent_issue_id,
                      parent_identifier, repo, worktree_base, lock_dir, log_file,
                      work_dir=work_dir, base_branch=base_branch,
-                     session_id=session_id, api_key=api_key, env=env)
+                     session_id=session_id, api_key=api_key)
 
         if session_id:
             emit_response(session_id, f"Completed {phase}", api_key)
     finally:
-        lock_file.unlink(missing_ok=True)
         if worktree_dir and worktree_dir.exists():
             worktree_remove(str(repo), str(worktree_dir))
         if phase == PHASE_IMPLEMENTING:

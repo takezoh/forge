@@ -12,12 +12,12 @@ import pytest
 from agent.webhook import (
     _verify_signature, _extract_issue_from_context, _process_event,
     _handle_created, _handle_prompted, _handle_stop, _handle_created_issue,
-    _handle_status_change, app, STATE_TO_PHASE,
+    _handle_status_change, app,
 )
 from config.constants import (
     STATE_PLANNING, STATE_IMPLEMENTING,
-    STATE_PLAN_CHANGES_REQUESTED, STATE_CHANGES_REQUESTED,
-    PHASE_PLANNING, PHASE_IMPLEMENTING, PHASE_PLAN_REVIEW, PHASE_REVIEW,
+    STATE_CHANGES_REQUESTED, STATE_TO_PHASE,
+    PHASE_PLANNING, PHASE_IMPLEMENTING, PHASE_REVIEW,
 )
 
 SID = "sess-1"
@@ -234,7 +234,6 @@ class TestStateToPhase:
     @pytest.mark.parametrize("state,phase", [
         (STATE_PLANNING, PHASE_PLANNING),
         (STATE_IMPLEMENTING, PHASE_IMPLEMENTING),
-        (STATE_PLAN_CHANGES_REQUESTED, PHASE_PLAN_REVIEW),
         (STATE_CHANGES_REQUESTED, PHASE_REVIEW),
     ])
     def test_mapping(self, state, phase):

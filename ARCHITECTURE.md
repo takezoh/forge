@@ -2,7 +2,7 @@
 
 ## Overview
 
-Loki is an agent system that automatically executes tasks via Claude Code CLI, triggered by Linear issue status changes. It consists of two processes — a polling daemon (`forge`) and a webhook server (`agent`) — coordinated through a file-based queue.
+Loki is an agent system that automatically executes tasks via Claude Code CLI, triggered by Linear issue status changes. It consists of two processes — a polling daemon (`forge`) and a webhook server (Sleipnir, `agent/`) — coordinated through a file-based queue.
 
 ## Components
 
@@ -30,7 +30,7 @@ Loki is an agent system that automatically executes tasks via Claude Code CLI, t
 | `executor.py` | Per-issue execution unit. Prompt assembly → worktree setup → Claude execution → post-processing (status update, comment posting) |
 | `queue.py` | File-based queue. `enqueue` / `dequeue_all` / `wake` (SIGUSR1) |
 
-### agent/ (Frontend)
+### agent/ (Sleipnir — Frontend)
 
 | Module | Role |
 |--------|------|
@@ -88,7 +88,7 @@ Loki is an agent system that automatically executes tasks via Claude Code CLI, t
 Requests via webhook are written to the queue in a fire-and-forget manner; the forge daemon consumes them on the next cycle.
 
 ```
-agent (webhook) → queue.enqueue(queue_dir, issue_id, session_id, phase)
+sleipnir (webhook) → queue.enqueue(queue_dir, issue_id, session_id, phase)
                 → queue.wake(pid_file)  # SIGUSR1
 forge (daemon)  → consume_queue(queue_dir) → merged into session_map → dispatch
 ```

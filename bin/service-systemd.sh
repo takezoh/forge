@@ -84,7 +84,7 @@ cmd_logs_polling()       { _logs forge; }
 
 # --- forge-webhook ---
 
-cmd_register_webhook()   { _register_service "forge-webhook" "Forge Webhook - Linear Agent API webhook server" "${FORGE_ROOT}/bin/webhook.sh" 10; }
+cmd_register_webhook()   { _register_service "forge-webhook" "Loki Sleipnir - Linear Agent API webhook server" "${FORGE_ROOT}/bin/webhook.sh" 10; }
 cmd_unregister_webhook() { _unregister_service "forge-webhook"; }
 cmd_enable_webhook()     { _systemctl_cmd enable forge-webhook; }
 cmd_disable_webhook()    { _systemctl_cmd disable forge-webhook; }

@@ -16,7 +16,7 @@ Linear-driven AI agent. Automatically plans and implements tasks triggered by is
   - `orchestrator.py` — Polling, dispatch, PR creation
   - `executor.py` — Per-issue execution (prompt, worktree, post-processing)
   - `queue.py` — File-based queue for async dispatch (enqueue/dequeue/wake)
-- `agent/` — Frontend (webhook server)
+- `agent/` — Sleipnir: webhook server (frontend)
   - `__main__.py` — Entry point (`python -m agent`)
   - `webhook.py` — Linear Agent API webhook
 - `bin/` — Shell scripts (`forge.sh`, `webhook.sh`, `service-systemd.sh`, `service-launchd.sh`)

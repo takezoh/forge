@@ -20,7 +20,7 @@ Connect at Settings → Integrations → GitHub. Required for automatic PR synci
 ### Issue Statuses
 
 Add the following statuses at Settings → Teams → Issue statuses & automations:
-- Planning, Pending Approval, Plan Changes Requested, Implementing, Changes Requested, Failed
+- Planning, Pending Approval, Implementing, Changes Requested, Failed
 
 (Backlog, In Review, Done, Cancelled exist by default in Linear)
 
@@ -109,8 +109,21 @@ bin/service-launchd.sh logs
 
 ## Workflow
 
-```
-Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Implementing → In Review ⇄ Changes Requested → Done
+```mermaid
+stateDiagram-v2
+    [*] --> Planning : Issue created / status change
+    Planning --> PendingApproval : Plan needs human review
+    Planning --> Implementing : Plan auto-approved
+    PendingApproval --> Planning : Human moves back to Planning
+    PendingApproval --> Implementing : Human approves
+    Implementing --> InReview : All sub-issues done + PR created
+    InReview --> ChangesRequested : Human requests changes
+    ChangesRequested --> InReview : Agent applies fixes
+    InReview --> Done : Human merges PR
+
+    PendingApproval: Pending Approval
+    InReview: In Review
+    ChangesRequested: Changes Requested
 ```
 
 | Status | Category | Actor | Description |
@@ -118,7 +131,6 @@ Backlog → Planning → Pending Approval ⇄ Plan Changes Requested → Impleme
 | Backlog | Backlog | Human | Not started |
 | Planning | Started | Agent | Creating sub-issues and plan |
 | Pending Approval | Started | Human | Reviewing the plan |
-| Plan Changes Requested | Started | Agent | Revising plan based on feedback |
 | Implementing | Started | Agent | Building + PR creation |
 | In Review | Started | Human | Reviewing PRs |
 | Changes Requested | Started | Agent | Fixing PR review feedback |

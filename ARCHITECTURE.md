@@ -40,6 +40,58 @@ Loki is an agent system that automatically executes tasks via Claude Code CLI, t
 
 ## Execution Flow
 
+### Status Transitions
+
+#### Parent Issue State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Planning : Issue created / status change (webhook)
+    Planning --> PendingApproval : Plan needs human review
+    Planning --> Implementing : Plan auto-approved
+    PendingApproval --> Planning : Human requests changes (triggers plan_review)
+    PendingApproval --> Implementing : Human approves
+    Implementing --> InReview : All sub-issues done + PR created
+    InReview --> ChangesRequested : Human requests changes
+    ChangesRequested --> InReview : Agent applies fixes
+    InReview --> Done : Human merges PR
+    Planning --> Failed : Error
+    PendingApproval --> Failed : Error
+    Implementing --> Failed : Error
+    InReview --> Failed : Error
+    ChangesRequested --> Failed : Error
+
+    PendingApproval: Pending Approval
+    InReview: In Review
+    ChangesRequested: Changes Requested
+```
+
+#### Sub-issue State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Todo : Created by subissue_creation
+    Todo --> InProgress : Dependencies resolved, dispatched
+    InProgress --> Done : Implementation complete
+    InProgress --> Failed : Error
+
+    InProgress: In Progress
+```
+
+#### System Flow
+
+```mermaid
+flowchart LR
+    LW[Linear webhook] --> Sleipnir
+    LP[Linear polling] --> Forge
+    Sleipnir --> Queue
+    Queue -->|SIGUSR1 wake| Orchestrator
+    subgraph Forge
+        Orchestrator --> Executor
+    end
+    Executor -->|subprocess| Claude[Claude CLI]
+```
+
 ### Planning
 
 1. Orchestrator polls for issues with `Planning` status
@@ -51,7 +103,7 @@ Loki is an agent system that automatically executes tasks via Claude Code CLI, t
 
 ### Plan Review
 
-1. Human changes status to `Plan Changes Requested` (issue transitions back to `Planning`, dispatched as plan_review)
+1. Human moves issue back to `Planning` status; orchestrator detects `Planning` + existing plan document → routes to `plan_review` phase
 2. Executor: fetches feedback + plan document → generates plan_review prompt → runs Claude
 3. Claude revises the plan document and outputs approval marker
 4. Executor transitions to `Implementing` or `Pending Approval`

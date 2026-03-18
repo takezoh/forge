@@ -12,9 +12,9 @@ from pathlib import Path
 from config import FORGE_ROOT, load_env, load_repos, resolve_repo, resolve_base_branch
 from config.constants import (STATE_PLANNING, STATE_IMPLEMENTING,
                         STATE_CHANGES_REQUESTED,
-                        STATE_IN_PROGRESS, FINISHED_STATE_TYPES,
+                        STATE_IN_PROGRESS, STATE_FAILED, FINISHED_STATE_TYPES,
                         PHASE_PLAN_REVIEW, PHASE_SUBISSUE_CREATION)
-from lib.linear import poll, fetch_sub_issues, update_issue_state
+from lib.linear import poll, fetch_sub_issues, update_issue_state, count_failure_comments
 from forge.queue import dequeue_all
 
 
@@ -246,6 +246,29 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                 if p:
                     dispatched = True
                 continue
+
+            max_retries = int(env.get("FORGE_MAX_RETRIES", "2"))
+            failed = [s for s in sub_issues if s.get("state") == STATE_FAILED]
+            for sub in failed:
+                try:
+                    failures = count_failure_comments(sub["id"], env=env)
+                except Exception as e:
+                    log(f"  Error counting failures for {sub['identifier']}: {e}")
+                    continue
+                if failures < max_retries:
+                    log(f"  Retrying {sub['identifier']} (failure {failures}/{max_retries})")
+                    try:
+                        update_issue_state(sub["id"], "Todo", env=env)
+                    except Exception as e:
+                        log(f"  Error resetting state for {sub['identifier']}: {e}")
+
+            if failed:
+                try:
+                    result = fetch_sub_issues(parent_id)
+                except Exception as e:
+                    log(f"  Error re-fetching sub-issues for {parent_identifier}: {e}")
+                    continue
+                sub_issues = result["sub_issues"]
 
             ready = [s for s in sub_issues if s.get("ready")]
             finished = [s for s in sub_issues if s.get("state_type") in FINISHED_STATE_TYPES]

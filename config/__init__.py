@@ -29,6 +29,7 @@ def load_env():
         "FORGE_LOCK_TIMEOUT_MIN": str(cfg["lock_timeout_min"]),
         "FORGE_QUEUE_DIR": cfg.get("queue_dir", cfg["lock_dir"] + "/queue"),
         "FORGE_PID_FILE": cfg.get("pid_file", cfg["lock_dir"] + "/forge.pid"),
+        "FORGE_MAX_RETRIES": str(cfg.get("max_retries", 2)),
     }
     for phase, val in cfg.get("budget", {}).items():
         env[f"FORGE_BUDGET_{phase.upper()}"] = str(val)

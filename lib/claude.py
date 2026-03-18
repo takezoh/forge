@@ -116,6 +116,7 @@ def run(prompt: str, work_dir: Path, *,
                    log_dir=log_file.parent if log_file else None,
                    extra_write_paths=allow_write)
 
+    output_format = "json" if capture_output else "stream-json"
     cmd = [
         "claude", "--print",
         "--no-session-persistence",
@@ -123,8 +124,10 @@ def run(prompt: str, work_dir: Path, *,
         "--max-turns", max_turns,
         "--model", model,
         "-p", "-",
-        "--output-format", "json",
+        "--output-format", output_format,
     ]
+    if not capture_output:
+        cmd.append("--verbose")
 
     if capture_output:
         proc = subprocess.Popen(
@@ -139,8 +142,12 @@ def run(prompt: str, work_dir: Path, *,
         try:
             stdout, stderr = proc.communicate(input=prompt, timeout=timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait()
+            os.killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
             raise
         finally:
             _current_process = None
@@ -161,8 +168,12 @@ def run(prompt: str, work_dir: Path, *,
                 proc.stdin.close()
                 _wait_with_idle_check(proc, cmd, log, timeout, idle_timeout)
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
                 raise
             finally:
                 _current_process = None

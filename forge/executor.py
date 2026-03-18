@@ -52,6 +52,20 @@ def resolve_config(phase: str, env: dict) -> dict:
     }
 
 
+def _parse_stream_json(text: str) -> dict | None:
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "result":
+            return obj
+    return None
+
+
 def parse_claude_result(log_file: Path) -> tuple[str, str | None]:
     if not log_file.exists():
         return "", None
@@ -59,9 +73,14 @@ def parse_claude_result(log_file: Path) -> tuple[str, str | None]:
     text = log_file.read_text()
     if not text.strip():
         return "", None
+
+    data = None
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
+        data = _parse_stream_json(text)
+
+    if data is None:
         lines = text.splitlines()
         return f"```\n{'\n'.join(lines[-20:])}\n```", None
 

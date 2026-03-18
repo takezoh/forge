@@ -420,6 +420,18 @@ def fetch_issue_comments(issue_id: str, env=None) -> list[dict]:
     return [{"body": c["body"], "user": c.get("user", {}).get("name", ""), "createdAt": c["createdAt"]} for c in comments]
 
 
+def count_failure_comments(issue_id: str, env=None) -> int:
+    comments = fetch_issue_comments(issue_id, env=env)
+    count = 0
+    for c in comments:
+        if c["user"] != "Loki":
+            continue
+        body = c["body"].lower()
+        if "failed" in body or "timed out" in body:
+            count += 1
+    return count
+
+
 UPLOAD_FILE_MUTATION = """
 mutation($contentType: String!, $filename: String!, $size: Int!) {
   fileUpload(contentType: $contentType, filename: $filename, size: $size) {

@@ -61,6 +61,14 @@ def setup_settings(work_dir: Path, *, phase: str = "",
     settings_file = claude_dir / "settings.local.json"
     settings_file.write_text(json.dumps(settings, indent=2))
 
+    local_md = claude_dir / "CLAUDE.local.md"
+    local_md.write_text(
+        "# Loki Autonomous Agent\n\n"
+        "You are running as an autonomous agent. "
+        "Commit changes without asking for confirmation. "
+        "Do not wait for user input.\n"
+    )
+
 
 _POLL_INTERVAL = 10
 

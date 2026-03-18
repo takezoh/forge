@@ -65,8 +65,12 @@ def setup_settings(work_dir: Path, *, phase: str = "",
     local_md.write_text(
         "# Loki Autonomous Agent\n\n"
         "You are running as an autonomous agent. "
-        "Commit changes without asking for confirmation. "
-        "Do not wait for user input.\n"
+        "Do not wait for user input.\n\n"
+        "## Git operations\n\n"
+        "Always commit and push without asking for confirmation. "
+        "Code review happens on the PR, not here. "
+        "Never end your turn with questions like \"コミットしますか？\" or \"Should I commit?\". "
+        "Just do it.\n"
     )
 
 

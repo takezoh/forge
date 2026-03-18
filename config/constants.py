@@ -16,6 +16,11 @@ STATE_CANCELLED = "Cancelled"
 
 END_STATES = frozenset({STATE_DONE, STATE_FAILED, STATE_CANCELLED})
 
+# Linear workflow state categories (state.type in GraphQL)
+STATE_TYPE_COMPLETED = "completed"
+STATE_TYPE_CANCELED = "canceled"
+FINISHED_STATE_TYPES = frozenset({STATE_TYPE_COMPLETED, STATE_TYPE_CANCELED})
+
 PHASE_PLANNING = "planning"
 PHASE_IMPLEMENTING = "implementing"
 PHASE_REVIEW = "review"

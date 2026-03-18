@@ -5,7 +5,7 @@ import time
 import httpx
 
 from config import load_env, get_api_key, parse_labels
-from config.constants import END_STATES, STATE_DONE, STATE_TODO
+from config.constants import END_STATES, FINISHED_STATE_TYPES, STATE_DONE, STATE_TODO
 
 
 def graphql(api_key: str, query: str, variables: dict = None) -> dict:
@@ -105,7 +105,7 @@ query($parentId: String!) {
         identifier
         title
         description
-        state { name }
+        state { name type }
         labels {
           nodes {
             name
@@ -123,7 +123,7 @@ query($parentId: String!) {
             type
             issue {
               id
-              state { name }
+              state { name type }
             }
           }
         }
@@ -198,8 +198,8 @@ def is_ready(node: dict) -> bool:
         return False
     for rel in node.get("inverseRelations", {}).get("nodes", []):
         if rel["type"] == "blocks":
-            blocker_state = rel.get("issue", {}).get("state", {}).get("name", "")
-            if blocker_state != STATE_DONE:
+            blocker_state_type = rel.get("issue", {}).get("state", {}).get("type", "")
+            if blocker_state_type not in FINISHED_STATE_TYPES:
                 return False
     return True
 
@@ -263,7 +263,9 @@ def fetch_sub_issues(parent_id: str, env=None) -> dict:
 
     sub_issues = []
     for node in nodes:
-        state_name = node.get("state", {}).get("name", "")
+        state = node.get("state", {})
+        state_name = state.get("name", "")
+        state_type = state.get("type", "")
         labels = parse_labels(node.get("labels", {}).get("nodes", []))
 
         sub_issues.append({
@@ -272,6 +274,7 @@ def fetch_sub_issues(parent_id: str, env=None) -> dict:
             "title": node["title"],
             "description": node.get("description", ""),
             "state": state_name,
+            "state_type": state_type,
             "labels": labels,
             "ready": is_ready(node),
         })

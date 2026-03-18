@@ -12,7 +12,7 @@ from pathlib import Path
 from config import FORGE_ROOT, load_env, load_repos, resolve_repo, resolve_base_branch
 from config.constants import (STATE_PLANNING, STATE_IMPLEMENTING,
                         STATE_CHANGES_REQUESTED,
-                        STATE_IN_PROGRESS, STATE_DONE,
+                        STATE_IN_PROGRESS, FINISHED_STATE_TYPES,
                         PHASE_PLAN_REVIEW, PHASE_SUBISSUE_CREATION)
 from lib.linear import poll, fetch_sub_issues, update_issue_state
 from forge.queue import dequeue_all
@@ -248,8 +248,8 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                 continue
 
             ready = [s for s in sub_issues if s.get("ready")]
-            done = [s for s in sub_issues if s.get("state") == STATE_DONE]
-            log(f"  {parent_identifier}: {len(sub_issues)} sub-issues, {len(ready)} ready, {len(done)} done")
+            finished = [s for s in sub_issues if s.get("state_type") in FINISHED_STATE_TYPES]
+            log(f"  {parent_identifier}: {len(sub_issues)} sub-issues, {len(ready)} ready, {len(finished)} finished")
 
             for sub in ready:
                 sub_issue = {
@@ -269,7 +269,7 @@ def run_once(env: dict, session_map: dict[str, dict] | None = None) -> bool:
                         log(f"  Error updating state for {sub['identifier']}: {e}")
                     dispatched = True
 
-            all_done = all(s.get("state") == STATE_DONE for s in sub_issues) and len(sub_issues) > 0
+            all_done = all(s.get("state_type") in FINISHED_STATE_TYPES for s in sub_issues) and len(sub_issues) > 0
             if all_done:
                 pr_lock = lock_dir / f"pr-{parent_identifier}.lock"
                 if pr_lock.exists():
